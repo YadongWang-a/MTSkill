@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "minicpm-ocr-shiti/questions.schema.json",
+  "title": "题库",
+  "type": "object",
+  "required": ["meta", "questions"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["question_count", "figure_count", "redrawn_count"],
+      "additionalProperties": true,
+      "properties": {
+        "source_dir": {"type": "string"},
+        "question_count": {"type": "integer", "minimum": 0},
+        "figure_count": {"type": "integer", "minimum": 0},
+        "table_count": {"type": "integer", "minimum": 0},
+        "redrawn_count": {"type": "integer", "minimum": 0},
+        "generated_at": {"type": "string"},
+        "ocr_model": {"type": "string"}
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/question"}
+    }
+  },
+  "$defs": {
+    "question": {
+      "type": "object",
+      "required": ["id", "pages", "type", "stem", "options", "subquestions", "subject", "chapter", "knowledge_points", "complete", "content_gaps", "figures"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^q[0-9]{3,}$"},
+        "pages": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}},
+        "bbox": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer", "minimum": 0}}
+          ]
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["page", "image_id"],
+            "additionalProperties": false,
+            "properties": {
+              "page": {"type": "integer", "minimum": 0},
+              "image_id": {"type": "string"},
+              "bbox": {
+                "oneOf": [
+                  {"type": "null"},
+                  {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer", "minimum": 0}}
+                ]
+              },
+              "block_ids": {"type": "array", "items": {"type": "integer", "minimum": 0}}
+            }
+          }
+        },
+        "type": {"enum": ["choice", "fill", "solve", "judge", "other"]},
+        "stem": {"type": "string"},
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key", "text"],
+            "additionalProperties": false,
+            "properties": {
+              "key": {"type": "string", "minLength": 1},
+              "text": {"type": "string"}
+            }
+          }
+        },
+        "subquestions": {"type": "array", "items": {"type": "string"}},
+        "subject": {"type": "string", "minLength": 1},
+        "chapter": {"type": "string", "minLength": 1},
+        "knowledge_points": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "complete": {"type": "boolean"},
+        "content_gaps": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "figures": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/figure"}
+        },
+        "tables": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/table"}
+        },
+        "uncertainties": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "figure": {
+      "type": "object",
+      "required": ["id", "kind", "crop", "preferred"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^p[0-9]+_b[0-9]+$"},
+        "kind": {"enum": ["function", "geometry", "chart", "photo", "other"]},
+        "role": {"type": "string"},
+        "crop": {"type": "string"},
+        "preferred": {"enum": ["crop", "redrawn"]},
+        "redraw_svg": {"type": ["string", "null"]},
+        "redraw_png": {"type": ["string", "null"]},
+        "self_check": {"enum": ["passed", "failed", null]},
+        "review_note": {"type": ["string", "null"]}
+      }
+    },
+    "table": {
+      "type": "object",
+      "required": ["table_id", "block_id", "format", "content", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "table_id": {"type": "string", "pattern": "^p[0-9]+_t[0-9]+$"},
+        "block_id": {"type": "integer", "minimum": 0},
+        "format": {"enum": ["markdown", "html"]},
+        "content": {"type": "string", "minLength": 1},
+        "source": {"enum": ["ocr", "llm"]},
+        "note": {"type": "string"}
+      }
+    }
+  }
+}
