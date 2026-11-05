@@ -139,13 +139,68 @@ def render_table(table: dict) -> str:
     )
 
 
-def render_sources(question: dict, page_map: dict[int, dict], base: Path) -> tuple[str, list[str]]:
+def _union(boxes: list[list[int]]) -> list[int] | None:
+    if not boxes:
+        return None
+    return [min(b[0] for b in boxes), min(b[1] for b in boxes),
+            max(b[2] for b in boxes), max(b[3] for b in boxes)]
+
+
+def load_ocr_boxes(ocr_dir: Path) -> dict[str, dict]:
+    result = {}
+    if not ocr_dir.is_dir():
+        return result
+    for path in ocr_dir.glob("p*.json"):
+        try:
+            data = read_json(path)
+        except Exception:
+            continue
+        image_id = data.get("image_id") or path.stem
+        ocr = (data.get("response") or {}).get("ocr") or {}
+        blocks = {}
+        for block in ocr.get("blocks") or []:
+            boxes = []
+            for box in [block.get("bbox")] + list(block.get("regions") or []):
+                if isinstance(box, (list, tuple)) and len(box) == 4:
+                    try:
+                        boxes.append([int(round(float(v))) for v in box])
+                    except (TypeError, ValueError):
+                        continue
+            merged = _union(boxes)
+            if merged:
+                try:
+                    blocks[int(block.get("order"))] = merged
+                except (TypeError, ValueError):
+                    continue
+        result[image_id] = {"blocks": blocks,
+                            "width": int(ocr.get("image_width") or 0),
+                            "height": int(ocr.get("image_height") or 0)}
+    return result
+
+
+def _part_bbox(question: dict, part: dict, index: int, info: dict,
+               ocr_boxes: dict[str, dict]) -> tuple[list[int] | None, str]:
+    bbox = part.get("bbox")
+    if bbox:
+        return bbox, "exact"
+    if index == 0 and question.get("bbox"):
+        return question["bbox"], "exact"
+    image_id = part.get("image_id") or info.get("image_id")
+    blocks = (ocr_boxes.get(image_id) or {}).get("blocks") or {}
+    block_ids = part.get("block_ids") or question.get("block_ids") or []
+    boxes = [blocks[b] for b in block_ids if isinstance(b, int) and b in blocks]
+    merged = _union(boxes)
+    return (merged, "approx") if merged else (None, "none")
+
+
+def render_sources(question: dict, page_map: dict[int, dict], base: Path,
+                   ocr_boxes: dict[str, dict]) -> tuple[str, list[str]]:
     problems = []
     parts = question.get("parts") or []
     if not parts:
         parts = [{"page": (question.get("pages") or [None])[0], "bbox": question.get("bbox")}]
     blocks = []
-    for part in parts:
+    for index, part in enumerate(parts):
         page = part.get("page")
         if page is None:
             problems.append(f"{question.get('id')}: part without page")
@@ -158,8 +213,9 @@ def render_sources(question: dict, page_map: dict[int, dict], base: Path) -> tup
         if not page_image or not (base / page_image).is_file():
             problems.append(f"{question.get('id')}: missing page image {page_image}")
             continue
-        bbox = part.get("bbox")
+        bbox, box_source = _part_bbox(question, part, index, info, ocr_boxes)
         box_html = ""
+        note = ""
         if bbox:
             width = max(1, int(info.get("ocr_width") or 1))
             height = max(1, int(info.get("ocr_height") or 1))
@@ -167,18 +223,29 @@ def render_sources(question: dict, page_map: dict[int, dict], base: Path) -> tup
             top = bbox[1] / height * 100
             w = (bbox[2] - bbox[0]) / width * 100
             h = (bbox[3] - bbox[1]) / height * 100
-            box_html = (f'<span class="box" style="left:{left:.3f}%;top:{top:.3f}%;'
+            cls = "box approx" if box_source == "approx" else "box"
+            box_html = (f'<span class="{cls}" style="left:{left:.3f}%;top:{top:.3f}%;'
                         f'width:{w:.3f}%;height:{h:.3f}%"></span>')
+            if box_source == "approx":
+                note = '<span class="locate-note">按块近似，可能覆盖相邻题</span>'
+        else:
+            note = '<span class="locate-note">该段无可用定位框</span>'
         blocks.append(
-            f'<div class="source"><img loading="lazy" src="{esc(page_image)}" alt="第 {int(page) + 1} 页">'
-            f'{box_html}<span class="page-tag">第 {int(page) + 1} 页</span></div>'
+            f'<div class="locate-item"><a class="source" href="{esc(page_image)}" target="_blank" rel="noopener">'
+            f'<img loading="lazy" src="{esc(page_image)}" alt="第 {int(page) + 1} 页">'
+            f'{box_html}<span class="page-tag">第 {int(page) + 1} 页</span></a>{note}</div>'
         )
-    return "".join(blocks), problems
+    if not blocks:
+        return "", problems
+    return ('<div class="locate"><div class="locate-title">原图位置</div>'
+            f'<div class="sources">{"".join(blocks)}</div></div>'), problems
 
 
-def build(questions_path: Path, figures_dir: Path, out_path: Path) -> tuple[str, list[str]]:
+def build(questions_path: Path, figures_dir: Path, out_path: Path,
+          ocr_dir: Path) -> tuple[str, list[str]]:
     data = read_json(questions_path)
     index = read_json(figures_dir / "index.json")
+    ocr_boxes = load_ocr_boxes(ocr_dir)
     page_map = {info["page"]: info for info in (index.get("pages") or {}).values()}
     questions = data.get("questions") or []
     base = out_path.parent
@@ -207,7 +274,7 @@ def build(questions_path: Path, figures_dir: Path, out_path: Path) -> tuple[str,
             rendered, figure_problems = render_figure(figure, base)
             figure_html.append(rendered)
             problems.extend(figure_problems)
-        sources_html, source_problems = render_sources(question, page_map, base)
+        sources_html, source_problems = render_sources(question, page_map, base, ocr_boxes)
         problems.extend(source_problems)
         tables_html = "".join(render_table(table) for table in question.get("tables") or [])
 
@@ -249,7 +316,7 @@ def build(questions_path: Path, figures_dir: Path, out_path: Path) -> tuple[str,
   {('<div class="gaps"><b>内容缺：</b><ul>' + gaps + '</ul></div>') if gaps else ''}
   {('<div class="notes"><b>不确定：</b><ul>' + uncertainties + '</ul></div>') if uncertainties else ''}
   <div class="chips">{knowledge}</div>
-  <details class="src-wrap"><summary>原图位置</summary><div class="sources">{sources_html}</div></details>
+  {sources_html}
 </article>""")
 
     subject_options = "".join(f'<option value="{esc(s)}">{esc(s)}</option>' for s in subjects)
@@ -300,13 +367,18 @@ figure.fig .mini {{ color:#2563eb; }}
 .chip {{ font-size:12px; background:color-mix(in srgb, var(--accent) 12%, transparent); color:var(--accent); border-radius:999px; padding:1px 9px; }}
 .gaps {{ margin-top:10px; padding:8px 10px; border-left:3px solid var(--warn); background:color-mix(in srgb, var(--warn) 8%, transparent); }}
 .notes {{ margin-top:8px; color:var(--muted); font-size:13px; }}
-.src-wrap {{ margin-top:12px; }}
-.src-wrap summary {{ cursor:pointer; color:var(--muted); font-size:13px; }}
+.locate {{ margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }}
+.locate-title {{ color:var(--muted); font-size:13px; margin-bottom:8px; }}
+.locate .sources {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }}
+.locate .locate-item {{ min-width:0; }}
+.locate .source {{ max-width:none; }}
 .sources {{ display:grid; gap:10px; margin-top:8px; }}
-.source {{ position:relative; max-width:620px; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; }}
+.source {{ position:relative; display:block; max-width:620px; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; }}
 .source img {{ display:block; width:100%; height:auto; }}
 .source .box {{ position:absolute; border:2px solid #2563eb; background:rgba(37,99,235,.12); box-shadow:0 0 0 1px rgba(255,255,255,.6) inset; }}
+.source .box.approx {{ border-style:dashed; border-color:#b42318; background:rgba(180,35,24,.10); }}
 .source .page-tag {{ position:absolute; right:6px; bottom:6px; font-size:11px; background:rgba(0,0,0,.55); color:#fff; padding:1px 6px; border-radius:4px; }}
+.locate-note {{ display:block; margin-top:3px; font-size:11px; color:var(--muted); }}
 #empty {{ display:none; text-align:center; color:var(--muted); padding:40px; }}
 </style>
 </head>
@@ -363,6 +435,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--questions", default="out/questions.json")
     parser.add_argument("--figures", default="out/figures")
+    parser.add_argument("--ocr", default="out/ocr")
     parser.add_argument("--out", default="out/questions.html")
     args = parser.parse_args()
 
@@ -376,7 +449,7 @@ def main() -> int:
         print(f"missing {figures_dir / 'index.json'}", file=sys.stderr)
         return 2
 
-    document, problems = build(questions_path, figures_dir, out_path)
+    document, problems = build(questions_path, figures_dir, out_path, Path(args.ocr))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(document, encoding="utf-8")
     print(f"wrote {out_path}")

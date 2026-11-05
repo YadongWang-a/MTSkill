@@ -100,10 +100,10 @@ python "$SK/scripts/render_svg.py" out/figures/<figure_id>.svg out/figures/<figu
 ### 6. 验收 + HTML
 
 ```bash
-python "$SK/scripts/build_html.py" --questions out/questions.json --figures out/figures --out out/questions.html
+python "$SK/scripts/build_html.py" --questions out/questions.json --figures out/figures --ocr out/ocr --out out/questions.html
 ```
 
-在浏览器里抽查：卡片数 == `meta.question_count`；学科筛选、完整性筛选、搜索都生效；每张图能加载；重绘图上的“原切图”链接能打开；原图高亮框落在题目上；表格按行列渲染，不是截图。公式由 MathJax CDN 渲染，离线打开时保留原始 LaTeX。
+在浏览器里抽查：卡片数 == `meta.question_count`；学科筛选、完整性筛选、搜索都生效；每张图能加载；重绘图上的“原切图”链接能打开；**每张卡片都显示原图缩略图，并用框标出该题位置**；共享块的回退框为虚线并注明“按块近似”；表格按行列渲染，不是截图。公式由 MathJax CDN 渲染，离线打开时保留原始 LaTeX。
 
 完成判据：HTML 无 404 图片；validator 仍 0 problem；报告题数、配图数、表格数、重绘数、完整/缺口数。
 
