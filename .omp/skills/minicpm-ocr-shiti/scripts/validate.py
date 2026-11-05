@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import FIGURE_LABELS, TABLE_LABELS, read_json, setup_stdio
 
 TYPES = {"choice", "fill", "solve", "judge", "other"}
-KINDS = {"function", "geometry", "chart", "photo", "other"}
+KINDS = {"function", "geometry", "chart", "apparatus", "photo", "other"}
 PREFERRED = {"crop", "redrawn"}
 TABLE_FORMATS = {"markdown", "html"}
 TABLE_SOURCES = {"ocr", "llm"}
@@ -424,6 +424,8 @@ def validate_questions(path: Path, figures_dir: Path) -> list[str]:
             preferred = figure.get("preferred")
             if preferred not in PREFERRED:
                 problems.append(f"{q}/{figure_id}: bad preferred {preferred!r}")
+            if kind == "apparatus" and preferred != "crop":
+                problems.append(f"{q}/{figure_id}: apparatus diagrams must use preferred=crop")
 
             crop = figure.get("crop") or item.get("crop")
             if not crop or not (base / crop).is_file():

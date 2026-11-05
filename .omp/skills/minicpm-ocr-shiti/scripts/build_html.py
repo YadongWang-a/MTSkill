@@ -16,6 +16,7 @@ KIND_LABELS = {
     "function": "函数图",
     "geometry": "几何图",
     "chart": "统计图",
+    "apparatus": "化学装置图",
     "photo": "照片",
     "other": "配图",
 }

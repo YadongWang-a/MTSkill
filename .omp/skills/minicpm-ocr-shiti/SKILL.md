@@ -1,6 +1,6 @@
 ---
 name: minicpm-ocr-shiti
-description: 把练习册/试卷照片批量转成题库：MiniCPM-OCR 提取印刷文本与版面框，忽略手写草稿，切出配图，所有配图尝试重绘，输出带学科/章节/知识点/完整性的 JSON 与浏览 HTML。Use when the user wants 照片转题库、批量提取带图题目，or mentions MiniCPM-OCR.
+description: 把练习册/试卷照片批量转成题库：MiniCPM-OCR 提取印刷文本与版面框，忽略手写草稿，切出配图，配图尝试重绘（化学装置图除外），输出带学科/章节/知识点/完整性的 JSON 与浏览 HTML。Use when the user wants 照片转题库、批量提取带图题目，or mentions MiniCPM-OCR.
 ---
 
 # 照片 → 题库
@@ -30,7 +30,7 @@ SK="${MINICPM_OCR_SKILL_DIR:-$(realpath skill://minicpm-ocr-shiti 2>/dev/null ||
 
 - **只收印刷层**：题干、选项、小问只保留印刷内容。学生写的答案、步骤、批注、圈画一个字都不进 JSON；没有 `student_answer` 字段。
 - **坐标只信 OCR**：题框与图框来自 `ocr.blocks[].bbox`，不靠目测。`rotation.applied=true` 时坐标系是矫正后的页面，页面图与框必须来自同一坐标系。
-- **配图切图，表格转文本**：`image / chart` 切图；`table` 不切进 `figures`，一律转成 `tables[]` 里的 Markdown/HTML 文本。MiniCPM-OCR 的表格内容为空、`<otsl>`、或明显错行时，读 `out/tables/<table_id>.png` 交给 LLM 重转，`source="llm"`。**所有 `figures[]` 都尝试重绘**，每个只给一次机会，独立复核不过就回退原切图。
+- **配图切图，表格转文本**：`image / chart` 切图；`table` 不切进 `figures`，一律转成 `tables[]` 里的 Markdown/HTML 文本。MiniCPM-OCR 的表格内容为空、`<otsl>`、或明显错行时，读 `out/tables/<table_id>.png` 交给 LLM 重转，`source="llm"`。**所有 `figures[]` 都尝试重绘，但化学装置图（`kind="apparatus"`）除外**：装置图直接 `preferred="crop"`，不派绘图；其余图每个只给一次机会，独立复核不过就回退原切图。
 - **不补不编**：照片拍不到、被裁断、缺选项的，写 `content_gaps` 并把 `complete` 置 `false`；不猜内容，不用“略”“同上”填空。
 - **公式可渲染**：行内公式用 `\(...\)`，独立公式用 `\[...\]`，化学用 `\ce{}`。JSON 与 HTML 共用这一份文本，不存两份。
 
@@ -80,9 +80,9 @@ python "$SK/scripts/merge_question_parts.py" --parts out/question_parts --out ou
 
 完成判据：`python "$SK/scripts/validate.py" --questions out/questions.json --figures out/figures --ocr out/ocr` 0 problem；`id` 唯一；每题 `subject / chapter / knowledge_points / complete` 齐全；每个 `figure_id` 都能解析到切图；表格是 `tables[]` 文本，不是 `figures`。
 
-### 5. 重绘所有配图（并行、一次机会）
+### 5. 重绘配图（化学装置图除外，并行、一次机会）
 
-`figures[]` 里的每一张图都尝试重绘，不限 `function / geometry / chart`；`photo / other` 也画一次。每张图一个 subagent，**全部并行**，按 `$SK/references/redraw-pass.md` 画 SVG：
+`figures[]` 里除 `kind="apparatus"` 外的每一张图都尝试重绘：`function / geometry / chart / photo / other` 都画一次；**化学装置图直接保留原切图，不派绘图 agent**。可重绘的图一张一个 subagent，**全部并行**，按 `$SK/references/redraw-pass.md` 画 SVG：
 
 ```bash
 python "$SK/scripts/render_svg.py" out/figures/<figure_id>.svg out/figures/<figure_id>_redraw.png
@@ -95,7 +95,7 @@ python "$SK/scripts/render_svg.py" out/figures/<figure_id>.svg out/figures/<figu
 
 硬闸：`preferred=redrawn` 必须同时有 `redraw_svg`、`redraw_png`、`self_check=passed`。改完重跑第 4 步校验。
 
-完成判据：每张图都有 `preferred`；validator 0 problem；每张图最多一份重绘尝试；失败原因记入 `review_note`。
+完成判据：每张图都有 `preferred`；`kind="apparatus"` 全部 `preferred="crop"`；其余图最多一份重绘尝试；失败原因记入 `review_note`。
 
 ### 6. 验收 + HTML
 

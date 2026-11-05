@@ -92,10 +92,11 @@
 | `function` | 坐标轴 + 曲线/直线/抛物线，或题干要求画函数图象 |
 | `geometry` | 三角形、圆、角、平行线、立体图，标注顶点/边长/角度 |
 | `chart` | 柱状/折线/扇形/统计图，带刻度或图例 |
+| `apparatus` | 化学实验装置：试管/烧瓶/洗气瓶/铁架台/尾气处理/装置连接图；**不重绘** |
 | `photo` | 实物照片、插图、人物 |
 | `other` | 以上都不是 |
 
-表格不进这张表：`table` 块一律走 `tables[]` 文本，不切图、不重绘。分类只影响标签；`function / geometry / chart / photo / other` 都会尝试重绘，拿不准选 `other` 即可。`crop` 从 `figures/index.json` 取，不要自己编路径。
+表格不进这张表：`table` 块一律走 `tables[]` 文本，不切图、不重绘。化学科目的实验装置必须选 `apparatus`，保留原切图；其他 `function / geometry / chart / photo / other` 会尝试重绘，拿不准选 `other` 即可。`crop` 从 `figures/index.json` 取，不要自己编路径。
 
 ## 表格合并
 

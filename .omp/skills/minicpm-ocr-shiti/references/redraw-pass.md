@@ -1,6 +1,6 @@
 # 重绘与独立复核
 
-`figures[]` 里的**每一张图都尝试重绘**：`function / geometry / chart / photo / other` 都画一次。表格不在此列，`table` 块走 `tables[]` 的 Markdown/HTML 文本。
+`figures[]` 里除 `kind="apparatus"` 外的**每一张图都尝试重绘**：`function / geometry / chart / photo / other` 都画一次。**化学装置图（`apparatus`）不重绘**，直接 `preferred="crop"`；表格也不在此列，`table` 块走 `tables[]` 的 Markdown/HTML 文本。
 
 两条硬规则：
 
@@ -41,10 +41,11 @@ python "$SK/scripts/render_svg.py" out/figures/<id>.svg out/figures/<id>_redraw.
 
 ## 并行派单
 
-1. 从 `questions.json` 收集所有 `figures[].id`，一次列出；表题不在内。
-2. 每张图一个绘图 subagent，**同批发出**；每张只写一个 `<id>.svg`，不共享文件。
-3. 所有 SVG 渲染完后，再每张图一个 reviewer subagent，**同批发出**。
+1. 从 `questions.json` 收集可重绘的 `figures[].id`：跳过 `kind="apparatus"`，表题也不在内。
+2. 每张可重绘图一个绘图 subagent，**同批发出**；每张只写一个 `<id>.svg`，不共享文件。
+3. 所有 SVG 渲染完后，再每张可重绘图一个 reviewer subagent，**同批发出**。
 4. 任何一张失败只影响它自己：`preferred="crop"`，其余照常。
+5. `apparatus` 不派绘图、不派 reviewer；直接 `preferred="crop"`，`self_check=null`，`review_note="化学装置图，按规则不重绘"`。
 
 ## 独立复核
 
