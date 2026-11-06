@@ -97,6 +97,7 @@
         "id": {"type": "string", "pattern": "^p[0-9]+_b[0-9]+$"},
         "kind": {"enum": ["function", "geometry", "chart", "apparatus", "photo", "other"]},
         "role": {"type": "string"},
+        "redraw_candidate": {"type": "boolean"},
         "crop": {"type": "string"},
         "preferred": {"enum": ["crop", "redrawn"]},
         "redraw_svg": {"type": ["string", "null"]},

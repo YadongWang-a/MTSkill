@@ -96,7 +96,7 @@
 | `photo` | 实物照片、插图、人物 |
 | `other` | 以上都不是 |
 
-表格不进这张表：`table` 块一律走 `tables[]` 文本，不切图、不重绘。化学科目的实验装置必须选 `apparatus`，保留原切图；其他 `function / geometry / chart / photo / other` 会尝试重绘，拿不准选 `other` 即可。`crop` 从 `figures/index.json` 取，不要自己编路径。
+表格不进这张表：`table` 块一律走 `tables[]` 文本，不切图、不重绘。化学科目的实验装置必须选 `apparatus`，保留原切图；`function / geometry / chart` 默认进入重绘候选；`photo / other` 默认切图，只有明确可画且值得画时才标 `redraw_candidate=true`。拿不准就不标。`crop` 从 `figures/index.json` 取，不要自己编路径。
 
 ## 表格合并
 

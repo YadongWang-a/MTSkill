@@ -1,11 +1,12 @@
 # 重绘与独立复核
 
-`figures[]` 里除 `kind="apparatus"` 外的**每一张图都尝试重绘**：`function / geometry / chart / photo / other` 都画一次。**化学装置图（`apparatus`）不重绘**，直接 `preferred="crop"`；表格也不在此列，`table` 块走 `tables[]` 的 Markdown/HTML 文本。
+只重绘候选：默认 `function / geometry / chart`，以及显式 `redraw_candidate=true` 的图。**`apparatus / photo / other` 默认切图**；化学装置图永不重绘。表格走 `tables[]` 文本，不在此列。
 
-两条硬规则：
+三条硬规则：
 
-- **并行**：一张图一个 subagent，所有绘图任务同批发出；reviewer 也同批并行，不要串行等一张画完再画下一张。
-- **一次机会**：每张图只画一次、只审一次。review 不过或渲染失败就 `preferred="crop"`，不二次修图、不重试。
+- **4 张一批**：`redraw_plan.py` 分批；每批最多 4 个绘图 agent，总并发 4–6。画完批渲染、拼图、复核，同时可开下一批。
+- **硬预算**：每个绘图 agent 最多 3 次工具调用 / 180 秒；到点没落盘 SVG，主 agent 直接 `proc://<id>/kill`，按超时回退切图。不靠 agent 自觉。
+- **一次机会 + 批量复核**：每张图只画一次；每批用一张 3–5 图拼图交给**一个**没参与绘制的 reviewer，不每图一个 reviewer。失败不重画。
 
 目标不是“画得好看”，是**结构可替代原图**：曲线走向、交点、标注、刻度、相对位置都对得上。照片/复杂插图也一样判，画不忠实就回退。
 
@@ -39,20 +40,29 @@ python "$SK/scripts/render_svg.py" out/figures/<id>.svg out/figures/<id>_redraw.
 
 渲染后检查：PNG 最短边 ≥800 px；没有裁切；文字不重叠；线条不发虚。渲染失败就回退切图，不交半成品。
 
-## 并行派单
+## 分批流水线
 
-1. 从 `questions.json` 收集可重绘的 `figures[].id`：跳过 `kind="apparatus"`，表题也不在内。
-2. 每张可重绘图一个绘图 subagent，**同批发出**；每张只写一个 `<id>.svg`，不共享文件。
-3. 所有 SVG 渲染完后，再每张可重绘图一个 reviewer subagent，**同批发出**。
-4. 任何一张失败只影响它自己：`preferred="crop"`，其余照常。
-5. `apparatus` 不派绘图、不派 reviewer；直接 `preferred="crop"`，`self_check=null`，`review_note="化学装置图，按规则不重绘"`。
+```bash
+python "$SK/scripts/redraw_plan.py" --questions out/questions.json --out-dir out/redraw --batch-size 4
+```
 
-## 独立复核
+1. 按 `out/redraw/plan.json` 的 `batch_01…` 顺序处理；每批最多 4 张。
+2. 每批派最多 4 个绘图 agent；每个只读 job + 切图、写 SVG。job JSON 的 `budget` 是 3 次调用 / 180 秒；到点由主 agent 强杀。
+3. 渲染该批：`render_batch.py --batch batch_01 --workers 4 --timeout 90`。
+4. 生成拼图：`contact_sheet.py --batch batch_01`。
+5. 一个 reviewer 看这张拼图，写 `out/redraw/reviews/batch_01.json`；此时可开下一批绘图。
+6. 全部批完成后：`apply_redraw_reviews.py` 统一落 `preferred/self_check/review_note`。
+7. 非候选（`apparatus / photo / other` 未标 `redraw_candidate`）直接 `preferred="crop"`，不派 agent。
 
-派一个**没参与绘制**的 agent，只给它三样：原切图、重绘 PNG、题干。按下面清单逐项判，输出一行：
+## 独立复核（批量）
+
+派一个**没参与绘制**的 agent，看一张 3–5 图的拼图（左原切图、右重绘），逐图判，输出整批：
 
 ```json
-{"figure_id":"p000_b007","pass":true,"reason":"曲线开口、顶点、两条渐近线与原图一致；刻度 0/1/2 完整"}
+{"batch":"batch_01","results":[
+  {"figure_id":"p000_b007","pass":true,"reason":"曲线、刻度与标注一致"},
+  {"figure_id":"p000_b012","pass":false,"reason":"多画了一根导管"}
+]}
 ```
 
 清单（任一不过即 `pass=false`）：
@@ -65,10 +75,10 @@ python "$SK/scripts/render_svg.py" out/figures/<id>.svg out/figures/<id>_redraw.
 6. 文字可读，无乱码、重叠、裁切。
 7. `photo / other`：主体内容、结构和关键标注必须能替代原图；只是“画了个大概”就判 fail。
 
-复核结果写回 `questions.json`：
+复核结果由 `apply_redraw_reviews.py` 写回：
 
 - `pass=true` → `preferred="redrawn"`, `self_check="passed"`, `review_note=reason`；
-- `pass=false` → `preferred="crop"`, `self_check="failed"`, `review_note=reason`，保留 SVG/PNG 供排查，但 HTML 显示切图。
+- `pass=false` / 超时 / 未复核 → `preferred="crop"`, `self_check="failed"`, `review_note=reason`，保留 SVG/PNG 供排查。
 
 **`pass=false` 就结束**：不重画、不调参、不派第二轮 reviewer。重绘是可选增强，原切图始终是兜底。
 
