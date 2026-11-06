@@ -68,6 +68,8 @@ python "$SK/scripts/crop_figures.py" --ocr out/ocr --out out/figures --table-out
 
 完成判据：`python "$SK/scripts/validate.py" --pages out/pages --ocr out/ocr` 0 problem；每个有文字的 block 要么进某题的 `block_ids`，要么在 `ignored_blocks` 写明原因；每个 `table` block 要么进 `tables[]`，要么被忽略；`stem / options / subquestions` 里没有手写内容。
 
+**纯文本试验（可选，不读图）**：只给 OCR blocks/索引、不读 `pageimg`/crop，按 `$SK/references/page-pass-text-only.md` 写页面。适合纯印刷页；手写区分、OCR 纠错、表格空内容、图的归属都无法保证，默认仍用图像模式。
+
 ### 4. 合并跨页 + 定字段
 
 一个 agent 读全部 `out/pages/*.json` + `out/figures/index.json`，按 `$SK/references/merge-pass.md` 写 `out/questions.json`。表格在 `tables[]` 内合并（续表并成一张），不转成配图。题多（>20 题）就先按学科/章节拆到 `out/question_parts/*.json`，再合并：
