@@ -6,7 +6,7 @@
 
 - **4 张一批**：`redraw_plan.py` 分批；每批最多 4 个绘图 agent，总并发 4–6。画完批渲染、拼图、复核，同时可开下一批。
 - **硬预算**：每个绘图 agent 最多 3 次工具调用 / 180 秒；到点没落盘 SVG，主 agent 直接 `proc://<id>/kill`，按超时回退切图。不靠 agent 自觉。
-- **一次机会 + 批量复核**：每张图只画一次；每批用一张 3–5 图拼图交给**一个**没参与绘制的 reviewer，不每图一个 reviewer。reviewer 同样 2 次调用 / 180 秒，超时整批回退 crop。失败不重画。
+- **一次机会 + 批量复核**：每张图只画一次；每批用一张 3–5 图拼图交给**一个**没参与绘制的 reviewer，不每图一个 reviewer。**每个 batch 最多复核 2 次**，每次最多 **2 次工具调用**（读拼图 + 写 JSON），不打开单图；2 次后仍 fail/无结论，整批回退 crop。失败不重画。
 
 目标不是“画得好看”，是**结构可替代原图**：曲线走向、交点、标注、刻度、相对位置都对得上。照片/复杂插图也一样判，画不忠实就回退。
 
@@ -50,7 +50,7 @@ python "$SK/scripts/redraw_plan.py" --questions out/questions.json --out-dir out
 2. 每批派最多 4 个绘图 agent；每个只读 job + 切图、写 SVG。job JSON 的 `budget` 是 3 次调用 / 180 秒；到点由主 agent 强杀。
 3. 渲染该批：`render_batch.py --batch batch_01 --workers 4 --timeout 90`。
 4. 生成拼图：`contact_sheet.py --batch batch_01`。
-5. 一个 reviewer 看这张拼图，写 `out/redraw/reviews/batch_01.json`；此时可开下一批绘图。
+5. 一个 reviewer 看这张拼图，写 `out/redraw/reviews/batch_01.json`；每次只看拼图，不打开 crop/redraw/job。最多 2 次复核。
 6. 全部批完成后：`apply_redraw_reviews.py` 统一落 `preferred/self_check/review_note`。
 7. 非候选（`apparatus / photo / other` 未标 `redraw_candidate`）直接 `preferred="crop"`，不派 agent。
 
@@ -80,7 +80,7 @@ python "$SK/scripts/redraw_plan.py" --questions out/questions.json --out-dir out
 - `pass=true` → `preferred="redrawn"`, `self_check="passed"`, `review_note=reason`；
 - `pass=false` / 超时 / 未复核 → `preferred="crop"`, `self_check="failed"`, `review_note=reason`，保留 SVG/PNG 供排查。
 
-**`pass=false` 就结束**：不重画、不调参、不派第二轮 reviewer。重绘是可选增强，原切图始终是兜底。
+**`pass=false` 最多再复看一次**：只复核同一张重绘，不重画、不调参；第二次仍 false 就结束并回退 crop。重绘是可选增强，原切图始终是兜底。
 
 ## 硬闸
 

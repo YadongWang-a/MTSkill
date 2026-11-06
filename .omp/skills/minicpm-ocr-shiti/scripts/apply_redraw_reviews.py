@@ -11,20 +11,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import read_json, setup_stdio, write_json
 
 
-def load_reviews(directory: Path) -> dict:
+def load_reviews(directory: Path, max_reviews: int = 2) -> tuple[dict, int]:
     results = {}
+    ignored = 0
     if not directory.is_dir():
-        return results
-    for path in directory.glob("*.json"):
+        return results, ignored
+    batches = {}
+    for path in sorted(directory.glob("*.json")):
         try:
             data = read_json(path)
         except Exception:
             continue
-        for item in data.get("results") or []:
-            fid = item.get("figure_id")
-            if fid:
-                results[fid] = item
-    return results
+        batch = str(data.get("batch") or path.stem)
+        batches.setdefault(batch, []).append(data)
+    for docs in batches.values():
+        if len(docs) > max_reviews:
+            ignored += len(docs) - max_reviews
+        for data in docs[:max_reviews]:
+            for item in data.get("results") or []:
+                fid = item.get("figure_id")
+                if fid:
+                    results[fid] = item
+    return results, ignored
 
 
 def main() -> int:
@@ -34,11 +42,12 @@ def main() -> int:
     parser.add_argument("--plan", default="out/redraw/plan.json")
     parser.add_argument("--reviews", default="out/redraw/reviews")
     parser.add_argument("--parts", default="out/question_parts")
+    parser.add_argument("--max-reviews", type=int, default=2)
     args = parser.parse_args()
 
     plan = read_json(args.plan)
     jobs = plan.get("jobs") or {}
-    reviews = load_reviews(Path(args.reviews))
+    reviews, ignored = load_reviews(Path(args.reviews), max(1, args.max_reviews))
     questions_path = Path(args.questions)
 
     def apply(figure: dict) -> None:
@@ -87,7 +96,7 @@ def main() -> int:
     if parts.is_dir():
         for path in parts.glob("*.json"):
             process(path)
-    print(f"applied reviews: {len(reviews)}; questions: {questions_path}")
+    print(f"applied reviews: {len(reviews)}; ignored extra passes: {ignored}; questions: {questions_path}")
     return 0
 
 
