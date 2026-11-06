@@ -27,6 +27,7 @@ def main() -> int:
     questions = read_json(args.questions).get("questions") or []
     include = {k.strip() for k in args.include_kinds.split(",") if k.strip()}
     out_dir = Path(args.out_dir)
+    out_root = out_dir.parent
     jobs_dir = out_dir / "jobs"
     jobs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -57,8 +58,11 @@ def main() -> int:
                 "role": figure.get("role") or "",
                 "stem": question.get("stem") or "",
                 "crop": crop,
+                "crop_abs": str((out_root / crop).resolve()),
                 "svg": f"figures/{fid}.svg",
                 "png": f"figures/{fid}_redraw.png",
+                "svg_abs": str((out_root / "figures" / f"{fid}.svg").resolve()),
+                "png_abs": str((out_root / "figures" / f"{fid}_redraw.png").resolve()),
                 "budget": {"tool_calls": 3, "timeout_sec": 180},
             }
             jobs.append(job)

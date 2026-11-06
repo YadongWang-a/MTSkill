@@ -99,7 +99,7 @@ python "$SK/scripts/redraw_plan.py" --questions out/questions.json --out-dir out
    ```bash
    python "$SK/scripts/contact_sheet.py" --plan out/redraw/plan.json --batch batch_01
    ```
-4. **一个 reviewer 看一张 4 图拼图**（不是每图一个 reviewer），按 `$SK/references/redraw-pass.md` 输出 `out/redraw/reviews/batch_01.json`；复核期间可以同时开下一批绘图，总并发控制在 4–6。
+4. **一个 reviewer 看一张 4 图拼图**（不是每图一个 reviewer），按 `$SK/references/redraw-pass.md` 输出 `out/redraw/reviews/batch_01.json`；reviewer 同样 **2 次调用 / 180 秒**硬预算，超时整批回退 crop。复核期间可以同时开下一批绘图，总并发控制在 4–6。
 5. 批复核完成后套用结果：
    ```bash
    python "$SK/scripts/apply_redraw_reviews.py" --questions out/questions.json --plan out/redraw/plan.json --reviews out/redraw/reviews --parts out/question_parts
